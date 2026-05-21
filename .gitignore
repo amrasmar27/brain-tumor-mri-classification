@@ -8,7 +8,6 @@ __pycache__/
 
 # Project specific
 
-models/
 results/
 plots/
 # Distribution / packaging
