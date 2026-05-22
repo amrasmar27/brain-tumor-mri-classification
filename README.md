@@ -55,6 +55,7 @@ Based on the final evaluation, the best-performing model is:
 **ResNet50 Deeper Fine-Tuning**
 
 This model achieved the highest performance among the tested models and was selected for the Streamlit application.
+The final evaluation showed that ResNet50 Deeper Fine-Tuning achieved approximately 0.989 accuracy, 0.989 F1-score, and 0.999 ROC-AUC.
 
 ## Project Structure
 
