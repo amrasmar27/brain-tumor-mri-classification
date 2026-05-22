@@ -74,15 +74,16 @@ class GradCAM:
 def overlay_cam(img, cam):
     img = np.array(img.resize((224, 224)))
     heatmap = cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_JET)
+    heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
     return cv2.addWeighted(img, 0.6, heatmap, 0.4, 0)
 
 # ---------------- UI ----------------
 st.set_page_config(page_title="Brain Tumor AI", layout="wide")
 
-st.title("Brain Tumor AI System (Classification + Explainability)")
-st.markdown("Upload MRI image → Prediction + Confidence + Grad-CAM Explanation")
+st.title("🧠 Brain Tumor AI System")
+st.markdown("📤 Upload an MRI image to get prediction, confidence scores, and Grad-CAM explanation.")
 
-uploaded_file = st.file_uploader("Upload MRI Image", type=["jpg","png","jpeg"])
+uploaded_file = st.file_uploader("📁 Upload MRI Image", type=["jpg", "png", "jpeg"])
 
 if uploaded_file:
 
@@ -90,12 +91,10 @@ if uploaded_file:
 
     col1, col2 = st.columns(2)
 
-    # ---------------- LEFT ----------------
     with col1:
-        st.subheader("Original Image")
+        st.subheader("🖼️ Original MRI Image")
         st.image(image, width=300)
 
-    # preprocess
     x = transform(image).unsqueeze(0).to(DEVICE)
 
     with torch.no_grad():
@@ -104,31 +103,27 @@ if uploaded_file:
 
     pred = int(np.argmax(probs))
 
-    # ---------------- RIGHT ----------------
     with col2:
-        st.subheader("Prediction Result")
-        st.success(f"Class: {CLASS_NAMES[pred]}")
+        st.subheader("🔍 Prediction Result")
+        st.success(f"Predicted Class: {CLASS_NAMES[pred]}")
 
-        # ---------------- TOP-3 ----------------
-        st.subheader("Top-3 Predictions")
+        st.subheader("🏆 Top-3 Predictions")
         top3 = np.argsort(probs)[::-1][:3]
 
         for i in top3:
-            st.write(f"👉 {CLASS_NAMES[i]} : {probs[i]:.4f}")
+            st.write(f"👉 {CLASS_NAMES[i]}: {probs[i]:.4f}")
 
-        # ---------------- UNCERTAINTY ----------------
         uncertainty = probs[top3[0]] - probs[top3[1]]
 
-        st.subheader("Uncertainty Score")
+        st.subheader("📊 Uncertainty Score")
         st.info(f"Confidence Gap: {uncertainty:.4f}")
 
         if uncertainty < 0.2:
-            st.warning("Model is uncertain (low confidence gap)")
+            st.warning("⚠️ Model is uncertain because the confidence gap is low.")
         else:
-            st.success("Model is confident")
+            st.success("✅ Model is confident in this prediction.")
 
-    # ---------------- GRAD-CAM ----------------
-    st.subheader("Model Explainability (Grad-CAM)")
+    st.subheader("🔥 Model Explainability (Grad-CAM)")
 
     target_layer = model.layer4[-1]
     gradcam = GradCAM(model, target_layer)
@@ -136,4 +131,7 @@ if uploaded_file:
     cam = gradcam.generate(x, pred)
     result_img = overlay_cam(image, cam)
 
-    st.image(result_img, caption="AI Focus Areas (Grad-CAM)", width=350)
+    st.image(result_img, caption="AI Focus Areas using Grad-CAM", width=350)
+
+else:
+    st.info("👆 Please upload an MRI image to start the analysis.")
