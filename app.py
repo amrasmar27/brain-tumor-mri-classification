@@ -9,9 +9,7 @@ from torchvision import transforms
 
 # ---------------- CONFIG ----------------
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 CLASS_NAMES = ["glioma", "meningioma", "no_tumor", "pituitary"]
-
 MODEL_PATH = "models/mobilenet_block_unfreeze.pth"
 
 # ---------------- MODEL ----------------
@@ -45,7 +43,7 @@ class GradCAM:
         self.activations = None
 
         target_layer.register_forward_hook(self.forward_hook)
-        target_layer.register_backward_hook(self.backward_hook)
+        target_layer.register_full_backward_hook(self.backward_hook)
 
     def forward_hook(self, module, input, output):
         self.activations = output
@@ -57,7 +55,6 @@ class GradCAM:
         self.model.zero_grad()
 
         output = self.model(x)
-
         loss = output[0, class_idx]
         loss.backward()
 
@@ -68,7 +65,6 @@ class GradCAM:
         cam = torch.sum(weights * acts, dim=1)
 
         cam = torch.relu(cam).squeeze().detach().cpu().numpy()
-
         cam = cv2.resize(cam, (224, 224))
         cam = (cam - cam.min()) / (cam.max() + 1e-8)
 
@@ -77,50 +73,67 @@ class GradCAM:
 
 def overlay_cam(img, cam):
     img = np.array(img.resize((224, 224)))
-
-    heatmap = cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_VIRIDIS)
-    overlay = cv2.addWeighted(img, 0.6, heatmap, 0.4, 0)
-
-    return overlay
+    heatmap = cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_JET)
+    return cv2.addWeighted(img, 0.6, heatmap, 0.4, 0)
 
 # ---------------- UI ----------------
-st.set_page_config(page_title="Brain Tumor AI", layout="centered")
+st.set_page_config(page_title="Brain Tumor AI", layout="wide")
 
-st.title("🧠 Brain Tumor Classification + Explainability (Grad-CAM)")
-st.write("Upload MRI image to predict tumor type and visualize AI reasoning.")
+st.title("🧠 Brain Tumor AI System (Classification + Explainability)")
+st.markdown("Upload MRI image → Prediction + Confidence + Grad-CAM Explanation")
 
-uploaded_file = st.file_uploader("Upload MRI Image", type=["jpg", "png", "jpeg"])
+uploaded_file = st.file_uploader("Upload MRI Image", type=["jpg","png","jpeg"])
 
-if uploaded_file is not None:
+if uploaded_file:
 
     image = Image.open(uploaded_file).convert("RGB")
 
-    st.image(image, caption="Original Image", width=250)
+    col1, col2 = st.columns(2)
+
+    # ---------------- LEFT ----------------
+    with col1:
+        st.subheader("Original Image")
+        st.image(image, width=300)
 
     # preprocess
     x = transform(image).unsqueeze(0).to(DEVICE)
 
-    # prediction
     with torch.no_grad():
         output = model(x)
-        probs = torch.softmax(output, dim=1)
-        pred = torch.argmax(probs, dim=1).item()
+        probs = torch.softmax(output, dim=1)[0].cpu().numpy()
 
-    st.subheader("🧠 Prediction:")
-    st.success(CLASS_NAMES[pred])
+    pred = int(np.argmax(probs))
 
-    st.subheader("📊 Confidence:")
-    for i, p in enumerate(probs[0]):
-        st.write(f"{CLASS_NAMES[i]}: {p.item():.4f}")
+    # ---------------- RIGHT ----------------
+    with col2:
+        st.subheader("Prediction Result")
+        st.success(f"Class: {CLASS_NAMES[pred]}")
+
+        # ---------------- TOP-3 ----------------
+        st.subheader("Top-3 Predictions")
+        top3 = np.argsort(probs)[::-1][:3]
+
+        for i in top3:
+            st.write(f"👉 {CLASS_NAMES[i]} : {probs[i]:.4f}")
+
+        # ---------------- UNCERTAINTY ----------------
+        uncertainty = probs[top3[0]] - probs[top3[1]]
+
+        st.subheader("Uncertainty Score")
+        st.info(f"Confidence Gap: {uncertainty:.4f}")
+
+        if uncertainty < 0.2:
+            st.warning("Model is uncertain (low confidence gap)")
+        else:
+            st.success("Model is confident")
 
     # ---------------- GRAD-CAM ----------------
-    st.subheader("Grad-CAM Explanation")
+    st.subheader("Model Explainability (Grad-CAM)")
 
     target_layer = model.features[-1]
     gradcam = GradCAM(model, target_layer)
 
     cam = gradcam.generate(x, pred)
-
     result_img = overlay_cam(image, cam)
 
-    st.image(result_img, caption="Grad-CAM Heatmap", width=250)
+    st.image(result_img, caption="AI Focus Areas (Grad-CAM)", width=350)
