@@ -10,12 +10,12 @@ from torchvision import transforms
 # ---------------- CONFIG ----------------
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 CLASS_NAMES = ["glioma", "meningioma", "no_tumor", "pituitary"]
-MODEL_PATH = "models/mobilenet_block_unfreeze.pth"
+MODEL_PATH = "models/resnet50_deep_finetuning.pth"
 
 # ---------------- MODEL ----------------
 def load_model():
-    model = models.mobilenet_v2(weights=None)
-    model.classifier[1] = nn.Linear(model.last_channel, 4)
+    model = models.resnet50(weights=None)
+    model.fc = nn.Linear(model.fc.in_features, 4)
 
     model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
     model.to(DEVICE)
@@ -79,7 +79,7 @@ def overlay_cam(img, cam):
 # ---------------- UI ----------------
 st.set_page_config(page_title="Brain Tumor AI", layout="wide")
 
-st.title("🧠 Brain Tumor AI System (Classification + Explainability)")
+st.title("Brain Tumor AI System (Classification + Explainability)")
 st.markdown("Upload MRI image → Prediction + Confidence + Grad-CAM Explanation")
 
 uploaded_file = st.file_uploader("Upload MRI Image", type=["jpg","png","jpeg"])
@@ -130,7 +130,7 @@ if uploaded_file:
     # ---------------- GRAD-CAM ----------------
     st.subheader("Model Explainability (Grad-CAM)")
 
-    target_layer = model.features[-1]
+    target_layer = model.layer4[-1]
     gradcam = GradCAM(model, target_layer)
 
     cam = gradcam.generate(x, pred)
